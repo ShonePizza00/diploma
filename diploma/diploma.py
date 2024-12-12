@@ -6,10 +6,13 @@ import uuid
 from tkinter.filedialog import askdirectory
 import datetime
 import hashlib
+
 '''
-default packages reaction
-packages installed not via pip (check local directories)
-dependencies check (set of all modules)
++	default packages reaction
+	packages installed not via pip (check local directories)
+	check virtual environment pip
+	dependencies check (set of all modules)
+	relationships
 '''
 FILE_BUFFER_SIZE = 65536
 
@@ -71,9 +74,75 @@ pip_package_body = {
 		"licenseDeclared"]
 }
 
+def calculateHash(package_location, hash_handlers):
+	if (os.path.isdir(package_location)):
+		for _dir in os.walk(package_location):
+			for f in _dir[-1]:
+				f_handler = open(f"{_dir[0]}\\{f}", 'rb')
+				while True:
+					data = f_handler.read(FILE_BUFFER_SIZE)
+					if (not data):
+						f_handler.close()
+						break
+					for handler in hash_handlers:
+						handler.update(data)
+	else:
+		f_handler = open(package_location + '.py', 'rb')
+		while True:
+			data = f_handler.read(FILE_BUFFER_SIZE)
+			if (not data):
+				f_handler.close()
+				break
+			for handler in hash_handlers:
+				handler.update(data)
+	return
+
+def insertHashToPart(s_part, hash_handlers):
+	s_part["checksums"] = []
+	for i in range(len(hash_handlers)):
+		checksum_part = checksums_package_body.copy()
+		checksum_part["algorithm"] = SPDX_CHECKSUMS_ALGS_NAMES[i]
+		checksum_part["checksumValue"] = hash_handlers[i].hexdigest()
+		s_part["checksums"].append(checksum_part)
+
+
+def projectSBOM(projectRootPath):
+	sbom_part = sbom_package_body.copy()
+	sbom_part["name"] = SPDX_PROJECT_NAME
+	sbom_part["versionInfo"] = "NOASSERTION"
+	sbom_part["supplier"] = "NOASSERTION"
+	sbom_part["downloadLocation"] = "NOASSERTION"
+	license_text = "NOASSERTION"
+	flag1 = True
+	for _dir in os.walk(projectRootPath):
+		if (flag1):
+			for f in _dir[-1]:
+				if ("LICENSE" in f.upper()):
+					f_holder = open(f"{_dir[0]}\\{f}")
+					license_text = f_holder.read()
+					f_holder.close()
+					flag1 = False
+					break
+	sbom_part["licenseConcluded"] = license_text.split('\n')[0].lstrip(' ').rstrip(' ')
+	sbom_part["licenseDeclared"] = sbom_part["licenseConcluded"]
+	sbom_part["copyrightText"] = license_text
+	sbom_part["description"] = "NOASSERTION"
+
+	hash_handlers = [
+	hashlib.sha1(),
+	hashlib.sha256(),
+	hashlib.sha512(),
+	hashlib.sha3_256(),
+	hashlib.md5()
+	]
+	calculateHash(projectRootPath, hash_handlers)
+	insertHashToPart(sbom_part, hash_handlers)
+	sbom_part["SPDXID"] = f"SPDXRef-Package-{hashlib.sha1(f'{SPDX_PROJECT_NAME}-{hash_handlers[0].hexdigest()}'.encode()).hexdigest()[:16]}"
+	sbom_file["packages"].append(sbom_part)
+
 def parseDefaultPackage(package_name):
 	sbom_part = sbom_package_body.copy()
-	package_version = os.popen(f'python -V').read().split(' ')[-1]
+	package_version = os.popen(f'python -V').read().split(' ')[-1][:-1]
 	sbom_part["name"] = package_name
 	sbom_part["SPDXID"] = f"SPDXRef-Package-{hashlib.sha1(f'{package_name}-{package_version}'.encode()).hexdigest()[:16]}"
 	sbom_part["versionInfo"] = package_version
@@ -84,7 +153,6 @@ def parseDefaultPackage(package_name):
 	sbom_part["copyrightText"] = f"1. This LICENSE AGREEMENT is between the Python Software Foundation (\"PSF\"), and\nthe Individual or Organization (\"Licensee\") accessing and otherwise using Python\n{package_version} software in source or binary form and its associated documentation.\n2. Subject to the terms and conditions of this License Agreement, PSF hereby\ngrants Licensee a nonexclusive, royalty-free, world-wide license to reproduce,\nanalyze, test, perform and/or display publicly, prepare derivative works,\ndistribute, and otherwise use Python {package_version} alone or in any derivative\nversion, provided, however, that PSF's License Agreement and PSF's notice of\ncopyright, i.e., \"Copyright \u00a9 2001-2024 Python Software Foundation; All Rights\nReserved\" are retained in Python {package_version} alone or in any derivative version\nprepared by Licensee.\n3. In the event Licensee prepares a derivative work that is based on or\nincorporates Python {package_version} or any part thereof, and wants to make the\nderivative work available to others as provided herein, then Licensee hereby\nagrees to include in any such work a brief summary of the changes made to Python\n{package_version}.\n4. PSF is making Python {package_version} available to Licensee on an \"AS IS\" basis.\nPSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED.  BY WAY OF\nEXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND DISCLAIMS ANY REPRESENTATION OR\nWARRANTY OF MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE\nUSE OF PYTHON {package_version} WILL NOT INFRINGE ANY THIRD PARTY RIGHTS.\n5. PSF SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON {package_version}\nFOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS A RESULT OF\nODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON {package_version}, OR ANY DERIVATIVE\nTHEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.\n6. This License Agreement will automatically terminate upon a material breach of\nits terms and conditions.\n7. Nothing in this License Agreement shall be deemed to create any relationship\nof agency, partnership, or joint venture between PSF and Licensee.  This License\nAgreement does not grant permission to use PSF trademarks or trade name in a\ntrademark sense to endorse or promote products or services of Licensee, or any\nthird party.\n8. By copying, installing or otherwise using Python {package_version}, Licensee agrees\nto be bound by the terms and conditions of this License Agreement."
 	sbom_part["description"] = "NOASSERTION"
 
-	
 	hash_handlers = [
 	hashlib.sha1(),
 	hashlib.sha256(),
@@ -92,24 +160,10 @@ def parseDefaultPackage(package_name):
 	hashlib.sha3_256(),
 	hashlib.md5()
 	]
-	for _dir in os.walk(package_location):
-		for f in _dir[-1]:
-			f_handler = open(f"{_dir[0]}\\{f}", 'rb')
-			
-			while True:
-				data = f_handler.read(FILE_BUFFER_SIZE)
-				if (not data):
-					f_handler.close()
-					break
-				for handler in hash_handlers:
-					handler.update(data)
-	sbom_part["checksums"] = []
-	for i in range(len(hash_handlers)):
-		checksum_part = checksums_package_body.copy()
-		checksum_part["algorithm"] = SPDX_CHECKSUMS_ALGS_NAMES[i]
-		checksum_part["checksumValue"] = hash_handlers[i].hexdigest()
-		sbom_part["checksums"].append(checksum_part)
 
+	package_location = os.popen('python -c "import os, sys; print(os.path.dirname(sys.executable))"').read()[:-1] + f'\\Lib\\{package_name}'
+	calculateHash(package_location, hash_handlers)
+	insertHashToPart(sbom_part, hash_handlers)
 	return sbom_part
 
 def parsePackage(package_name):
@@ -190,26 +244,40 @@ def parsePackage(package_name):
 	hashlib.sha3_256(),
 	hashlib.md5()
 	]
-	for _dir in os.walk(package_location):
-		for f in _dir[-1]:
-			f_handler = open(f"{_dir[0]}\\{f}", 'rb')
-			
-			while True:
-				data = f_handler.read(FILE_BUFFER_SIZE)
-				if (not data):
-					f_handler.close()
-					break
-				for handler in hash_handlers:
-					handler.update(data)
-	sbom_part["checksums"] = []
-	for i in range(len(hash_handlers)):
-		checksum_part = checksums_package_body.copy()
-		checksum_part["algorithm"] = SPDX_CHECKSUMS_ALGS_NAMES[i]
-		checksum_part["checksumValue"] = hash_handlers[i].hexdigest()
-		sbom_part["checksums"].append(checksum_part)
+	calculateHash(package_location, hash_handlers)
+	insertHashToPart(sbom_part, hash_handlers)
 	sbom_file["packages"].append(sbom_part)
 	return
-	
+
+def listAllPyFiles(root_folder):
+	py_files = []
+	for _dir in (os.walk(root_folder)):
+		for f in _dir[-1]:
+			if (f[-3:] == ".py"):
+				py_files.append(f"{_dir[0]}\\{f}")
+
+def parseModules(file_path):
+	modules = set()
+	f = open(file_path)
+	data = f.readlines()
+	f.close()
+	for line in data:
+		if (("from " in line) and ("#" not in line) and ("import " in line)):
+			modules.add(line.lstrip('from').lstrip(' ').split(' ')[0])
+			continue
+		if (("import " in line) and ("#" not in line)):
+			if (',' in line):
+				t1 = line.split(',')
+				t1[0] = t1[0].lstrip('import').lstrip(' ')
+				t1[-1] = t1[-1].lstrip(' ').split(' ')[0]
+				for i in range(len(t1)):
+					modules.add(t1[i].lstrip(' ').rstrip(' '))
+			else:
+				modules.add(line.lstrip('from').lstrip(' ').split(' ')[0])
+
+py_files = listAllPyFiles(SPDX_PROJECT_ROOT_PATH)
+
+projectSBOM(SPDX_PROJECT_ROOT_PATH)
 parsePackage('requests')
 parsePackage('certifi')
 parsePackage('urllib3')
