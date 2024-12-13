@@ -1,17 +1,38 @@
 import os
 import json
-from struct import pack
-from tabnanny import check
 import uuid
 from tkinter.filedialog import askdirectory
 import datetime
 import hashlib
+import platform
+
+OS_NAME_ = ""
+SEPARATOR_ = ""
+PIP_NAME_ = ""
+PYTHON_NAME_ = ""
+JSON_DUMP_FILE_PATH_ = askdirectory()
+if ("Windows" in platform.system()):
+	SEPARATOR_ = "\\"
+	PIP_NAME_ = "pip"
+	PYTHON_NAME_ = "python"
+	OS_NAME_ = "Windows"
+elif ("Linux" in platform.system()):
+	SEPARATOR_ = "/"
+	PIP_NAME_ = "pip"
+	PYTHON_NAME_ = "python3"
+	OS_NAME_ = "Linux"
+else:
+	SEPARATOR_ = "/"
+	PIP_NAME_ = "pip3"
+	PYTHON_NAME_ = "python3"
+	OS_NAME_ = "Mac"
 
 '''
 +	default packages reaction
 	packages installed not via pip (check local directories)
 	check virtual environment pip
 	dependencies check (set of all modules)
++	multi-platform
 	relationships
 '''
 FILE_BUFFER_SIZE = 65536
@@ -78,7 +99,7 @@ def calculateHash(package_location, hash_handlers):
 	if (os.path.isdir(package_location)):
 		for _dir in os.walk(package_location):
 			for f in _dir[-1]:
-				f_handler = open(f"{_dir[0]}\\{f}", 'rb')
+				f_handler = open(f"{_dir[0]}{SEPARATOR_}{f}", 'rb')
 				while True:
 					data = f_handler.read(FILE_BUFFER_SIZE)
 					if (not data):
@@ -105,7 +126,6 @@ def insertHashToPart(s_part, hash_handlers):
 		checksum_part["checksumValue"] = hash_handlers[i].hexdigest()
 		s_part["checksums"].append(checksum_part)
 
-
 def projectSBOM(projectRootPath):
 	sbom_part = sbom_package_body.copy()
 	sbom_part["name"] = SPDX_PROJECT_NAME
@@ -118,7 +138,7 @@ def projectSBOM(projectRootPath):
 		if (flag1):
 			for f in _dir[-1]:
 				if ("LICENSE" in f.upper()):
-					f_holder = open(f"{_dir[0]}\\{f}")
+					f_holder = open(f"{_dir[0]}{SEPARATOR_}{f}")
 					license_text = f_holder.read()
 					f_holder.close()
 					flag1 = False
@@ -126,6 +146,39 @@ def projectSBOM(projectRootPath):
 	sbom_part["licenseConcluded"] = license_text.split('\n')[0].lstrip(' ').rstrip(' ')
 	sbom_part["licenseDeclared"] = sbom_part["licenseConcluded"]
 	sbom_part["copyrightText"] = license_text
+	author_text = "NOASSERTION"
+	flag1 = True
+	for _dir in os.walk(projectRootPath):
+		if (flag1):
+			for f in _dir[-1]:
+				if ("AUTHOR" in f.upper()):
+					f_holder = open(f"{_dir[0]}{SEPARATOR_}{f}")
+					author_text = f_holder.readlines()
+					f_holder.close()
+					flag1 = False
+					break
+	supplier_type = "NOASSERTION"
+	author_name = "NOASSERTION"
+	author_email = "NOASSERTION"
+	for line in author_text:
+		if ("@" in line):
+			line = line.lstrip(' ').rstrip('\n').rstrip(' ')
+			t1_arr = line.split(' ')
+			for i in range(len(t1_arr)):
+				if ("@" in t1_arr[i]):
+					author_email = t1_arr[i]
+					if ((len(t1_arr) > 1) and (author_name == "NOASSERTION")):
+						t1_arr.remove(author_email)
+						author_name = " ".join(t1_arr)
+						supplier_type = "Person"
+					break
+		if ((("Inc." in line) or ("Co." in line)) and (supplier_type == "NOASSERTION")):
+			supplier_type = "Corporation"
+			if ("Inc." in line):
+				author_name = line.split("Inc.")[0].lstrip(' ').rstrip(' ')
+			else:
+				author_name = line.split("Co.")[0].lstrip(' ').rstrip(' ')
+	sbom_part["supplier"] = f"{supplier_type}: {author_name} ({author_email})"
 	sbom_part["description"] = "NOASSERTION"
 
 	hash_handlers = [
@@ -139,10 +192,11 @@ def projectSBOM(projectRootPath):
 	insertHashToPart(sbom_part, hash_handlers)
 	sbom_part["SPDXID"] = f"SPDXRef-Package-{hashlib.sha1(f'{SPDX_PROJECT_NAME}-{hash_handlers[0].hexdigest()}'.encode()).hexdigest()[:16]}"
 	sbom_file["packages"].append(sbom_part)
+	return sbom_part["SPDXID"] + ".json"
 
 def parseDefaultPackage(package_name):
 	sbom_part = sbom_package_body.copy()
-	package_version = os.popen(f'python -V').read().split(' ')[-1][:-1]
+	package_version = os.popen(f'{PYTHON_NAME_} -V').read().split(' ')[-1][:-1]
 	sbom_part["name"] = package_name
 	sbom_part["SPDXID"] = f"SPDXRef-Package-{hashlib.sha1(f'{package_name}-{package_version}'.encode()).hexdigest()[:16]}"
 	sbom_part["versionInfo"] = package_version
@@ -161,13 +215,18 @@ def parseDefaultPackage(package_name):
 	hashlib.md5()
 	]
 
-	package_location = os.popen('python -c "import os, sys; print(os.path.dirname(sys.executable))"').read()[:-1] + f'\\Lib\\{package_name}'
+	package_location = os.popen(f'{PYTHON_NAME_} -c "import os, sys; print(os.path.dirname(sys.executable))"').read()[:-1] + f'{SEPARATOR_}Lib{SEPARATOR_}{package_name}'
+	t_arr1 = package_location.split(SEPARATOR_)
+	if (("bin" in t_arr1) and (OS_NAME_ != "Windows")):
+		t_arr1.remove("bin")
+		t_arr1.insert(len(t_arr1) - 1, f"python{'.'.join(package_version.split('.')[0:-1])}")
+		package_location = f"{SEPARATOR_}".join(t_arr1)
 	calculateHash(package_location, hash_handlers)
 	insertHashToPart(sbom_part, hash_handlers)
 	return sbom_part
 
 def parsePackage(package_name):
-	a = os.popen(f'pip show {package_name}').read().split('\n')
+	a = os.popen(f'{PIP_NAME_} show {package_name}').read().split('\n')
 	sbom_part = sbom_package_body.copy()
 	package_author = ""
 	package_author_email = ""
@@ -206,13 +265,13 @@ def parsePackage(package_name):
 				sbom_part["supplier"] = f"Person: {package_author} ({package_author_email.lstrip('<').rstrip('>')})"
 		else:
 			sbom_part["supplier"] = f"Person: {package_author} ({package_author_email.lstrip('<').rstrip('>')})"
-	package_location += f"\\{package_name}"
-	package_dist_info_location = package_location + f"-{package_version}.dist-info\\"
+	package_location += f"{SEPARATOR_}{package_name}"
+	package_dist_info_location = package_location + f"-{package_version}.dist-info{SEPARATOR_}"
 	license_file_location = ""
 	for _dir in os.walk(package_dist_info_location):
 		for f in _dir[-1]:
 			if ("LICENSE" in f.upper()):
-				license_file_location = f"{_dir[0]}\\{f}"
+				license_file_location = f"{_dir[0]}{SEPARATOR_}{f}"
 	try:
 		f = open(license_file_location)
 		license_file_content = f.read()
@@ -254,7 +313,8 @@ def listAllPyFiles(root_folder):
 	for _dir in (os.walk(root_folder)):
 		for f in _dir[-1]:
 			if (f[-3:] == ".py"):
-				py_files.append(f"{_dir[0]}\\{f}")
+				py_files.append(f"{_dir[0]}{SEPARATOR_}{f}")
+	return py_files
 
 def parseModules(file_path):
 	modules = set()
@@ -275,14 +335,16 @@ def parseModules(file_path):
 			else:
 				modules.add(line.lstrip('from').lstrip(' ').split(' ')[0])
 
-py_files = listAllPyFiles(SPDX_PROJECT_ROOT_PATH)
-
-projectSBOM(SPDX_PROJECT_ROOT_PATH)
+#py_files = listAllPyFiles(SPDX_PROJECT_ROOT_PATH)
+#print(py_files)
+JSON_DUMP_FILE_PATH_ += f"{SEPARATOR_}{projectSBOM(SPDX_PROJECT_ROOT_PATH)}"
 parsePackage('requests')
 parsePackage('certifi')
 parsePackage('urllib3')
 parsePackage('os')
 #sbom_file[PACKAGES_NAME].append(package_json("requests"))
 
-print(json.dumps(sbom_file, indent=4))
-
+f_handler_json = open(JSON_DUMP_FILE_PATH_, 'w')
+#print(json.dumps(sbom_file, indent=4))
+json.dump(sbom_file, fp=f_handler_json, indent=4)
+f_handler_json.close()
