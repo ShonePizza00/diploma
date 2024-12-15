@@ -7,6 +7,4 @@ class treeNode:
 		self.dependenciesFiles_TN = []		# treeNode
 		#self.dependenciesModules = set()
 		self.dependenciesModules_TN = set()	# treeNode
-		#self.dependenciesModules_D = set()
-		self.dependenciesModules_D_TN = set()	# treeNode
 

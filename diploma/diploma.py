@@ -6,8 +6,10 @@ import datetime
 import hashlib
 import platform
 from tree import treeNode
+from pipParser import pipParser
 
 FILE_BUFFER_SIZE = 65536
+
 
 SPDX_LOG_MODE = True
 SPDX_CREATION_DATE = datetime.datetime.now()
@@ -65,15 +67,7 @@ def locatePipPython(project_dir, PIP_NAME, PYTHON_NAME):
 	
 PIP_NAME_, PYTHON_NAME_ = locatePipPython(SPDX_PROJECT_ROOT_PATH, PIP_NAME_, PYTHON_NAME_)
 
-'''
-+	default packages reaction
-	packages installed not via pip (check local directories)
-+	check virtual environment pip
-	deep packages searching (replace('-','_'), check RECORD file in dist-info)
-	dependencies check (set of all modules)
-+	multi-platform
-	relationships
-'''
+PP = pipParser(PIP_NAME_)
 
 SPDX_CHECKSUMS_ALGS_NAMES = [
 	"SHA1",
@@ -84,7 +78,7 @@ SPDX_CHECKSUMS_ALGS_NAMES = [
 ]
 
 sbom_file = {
-	"spdxVersion": "SPDX-2.2",
+	"spdxVersion": "SPDX-2.3",
 	"dataLicense": "CC0-1.0",
 	"SPDXID": "SPDXRef-DOCUMENT",
 	"name": f"{SPDX_PROJECT_NAME}",
@@ -92,7 +86,7 @@ sbom_file = {
 	"creationInfo": {
 		"created": f"{SPDX_CREATION_DATE.strftime('%Y-%m-%dT%H:%M:%SZ')}",
 		"creators" : [
-			"Tool: SPDX-Generator-Diploma-0.1",
+			"Tool: SPDX-Generator-Diploma-0.2",
 			"Organization: Gubkin Russian State University of Oil and Gas"
 			]
 		},
@@ -101,17 +95,17 @@ sbom_file = {
 }
 
 sbom_package_body = {
-	"name": "",#+
-	"SPDXID": "",#+
-	"versionInfo": "",#+
-	"supplier": "",#+
-	"downloadLocation": "NOASSERTION",#+
-	"licenseConcluded": "",#+
-	"licenseDeclared": "",#+
-	"licenseComments": "NOASSERTION",#+
-	"copyrightText": "",#+
-	"description": "",#+
-	"checksums": []#+
+	"name": "",
+	"SPDXID": "",
+	"versionInfo": "",
+	"supplier": "",
+	"downloadLocation": "NOASSERTION",
+	"licenseConcluded": "",
+	"licenseDeclared": "",
+	"licenseComments": "NOASSERTION",
+	"copyrightText": "",
+	"description": "",
+	"checksums": []
 }
 
 checksums_package_body = {
@@ -133,6 +127,9 @@ pip_package_body = {
 		"licenseConcluded",
 		"licenseDeclared"]
 }
+
+def parsePackageMetadata(packageName):
+	None
 
 def calculateHash(package_location, hash_handlers):
 	if (os.path.isdir(package_location)):
@@ -263,7 +260,7 @@ def projectSBOM(projectRootPath):
 	insertHashToPart(sbom_part, hash_handlers)
 	sbom_part["SPDXID"] = f"SPDXRef-Package-{hashlib.sha1(f'{SPDX_PROJECT_NAME}-{hash_handlers[0].hexdigest()}'.encode()).hexdigest()[:16]}"
 	sbom_file["packages"].append(sbom_part)
-	return sbom_part["SPDXID"] + ".json"
+	return sbom_part["SPDXID"]
 
 def fileSBOM(filepath):
 	sbom_part = sbom_package_body.copy()
@@ -292,6 +289,7 @@ def fileSBOM(filepath):
 	calculateHash(filepath[:-3], hash_handlers)
 	insertHashToPart(sbom_part, hash_handlers)
 	sbom_file["packages"].append(sbom_part)
+	return sbom_part["SPDXID"]
 
 def parseDefaultPackage(package_name):
 	logProcess(f"creating SBOM part for {package_name}")
@@ -308,9 +306,6 @@ def parseDefaultPackage(package_name):
 	sbom_part["licenseDeclared"] = "Python Software Foundation License"
 	sbom_part["copyrightText"] = f"1. This LICENSE AGREEMENT is between the Python Software Foundation (\"PSF\"), and\nthe Individual or Organization (\"Licensee\") accessing and otherwise using Python\n{package_version} software in source or binary form and its associated documentation.\n2. Subject to the terms and conditions of this License Agreement, PSF hereby\ngrants Licensee a nonexclusive, royalty-free, world-wide license to reproduce,\nanalyze, test, perform and/or display publicly, prepare derivative works,\ndistribute, and otherwise use Python {package_version} alone or in any derivative\nversion, provided, however, that PSF's License Agreement and PSF's notice of\ncopyright, i.e., \"Copyright \u00a9 2001-2024 Python Software Foundation; All Rights\nReserved\" are retained in Python {package_version} alone or in any derivative version\nprepared by Licensee.\n3. In the event Licensee prepares a derivative work that is based on or\nincorporates Python {package_version} or any part thereof, and wants to make the\nderivative work available to others as provided herein, then Licensee hereby\nagrees to include in any such work a brief summary of the changes made to Python\n{package_version}.\n4. PSF is making Python {package_version} available to Licensee on an \"AS IS\" basis.\nPSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED.  BY WAY OF\nEXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND DISCLAIMS ANY REPRESENTATION OR\nWARRANTY OF MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE\nUSE OF PYTHON {package_version} WILL NOT INFRINGE ANY THIRD PARTY RIGHTS.\n5. PSF SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON {package_version}\nFOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS A RESULT OF\nODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON {package_version}, OR ANY DERIVATIVE\nTHEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.\n6. This License Agreement will automatically terminate upon a material breach of\nits terms and conditions.\n7. Nothing in this License Agreement shall be deemed to create any relationship\nof agency, partnership, or joint venture between PSF and Licensee.  This License\nAgreement does not grant permission to use PSF trademarks or trade name in a\ntrademark sense to endorse or promote products or services of Licensee, or any\nthird party.\n8. By copying, installing or otherwise using Python {package_version}, Licensee agrees\nto be bound by the terms and conditions of this License Agreement."
 	sbom_part["description"] = "NOASSERTION"
-	if (package_name == 'sys'):
-		sbom_file["packages"].append(sbom_part)
-		return
 
 	hash_handlers = [
 	hashlib.sha1(),
@@ -319,6 +314,10 @@ def parseDefaultPackage(package_name):
 	hashlib.sha3_256(),
 	hashlib.md5()
 	]
+	if (package_name == 'sys'):
+		insertHashToPart(sbom_part, hash_handlers)
+		sbom_file["packages"].append(sbom_part)
+		return sbom_file["SPDXID"]
 	'''
 	#crossplatform block
 	package_location = os.popen(f'{PYTHON_NAME_} -c "import os, sys; print(os.path.dirname(sys.executable))"').read()[:-1] + f'{SEPARATOR_}Lib{SEPARATOR_}{package_name}'
@@ -352,12 +351,12 @@ def parseDefaultPackage(package_name):
 			t1_arr.append('Lib')
 			t1_arr.append(package_name)
 			package_location = f"{SEPARATOR_}".join(t1_arr)
-		calculateHash(package_location, hash_handlers)
+		if (calculateHash(package_location, hash_handlers) == -1):
+			logProcess(f"cannot locate {package_name}, inserting default checksum")
 
-	calculateHash(package_location, hash_handlers)
 	insertHashToPart(sbom_part, hash_handlers)
 	sbom_file["packages"].append(sbom_part)
-	return 
+	return sbom_part["SPDXID"]
 
 def emptyPackage(package_name):
 	logProcess(f"creating SBOM part for {package_name}")
@@ -405,24 +404,25 @@ def emptyPackage(package_name):
 			t1_arr.append('site-packages')
 			t1_arr.append(package_name)
 			package_location = f"{SEPARATOR_}".join(t1_arr)
-		calculateHash(package_location, hash_handlers)
+		if (calculateHash(package_location, hash_handlers) == -1):
+			logProcess(f"cannot locate {package_name}, inserting default checksum")
 	insertHashToPart(sbom_part, hash_handlers)
 	sbom_part["SPDXID"] = f"SPDXRef-Package-{hashlib.sha1(f'{package_name}-{hash_handlers[0].hexdigest()}'.encode()).hexdigest()[:16]}"
 	t1 = sbom_part["SPDXID"]
 	logProcess(f"SPDXID of SBOM part for {package_name} is {t1}")
 	sbom_file["packages"].append(sbom_part)
-	return
+	return sbom_part["SPDXID"]
 
 def parsePackage(package_name):
 	logProcess(f"creating SBOM part for {package_name}")
-	a = os.popen(f'{PIP_NAME_} show {package_name}').read().split('\n')
+	a = PP.getPackageInfo(package_name).split('\n')
+	# a = os.popen(f'{PIP_NAME_} show {package_name}').read().split('\n')
 	sbom_part = sbom_package_body.copy()
 	package_author = ""
 	package_author_email = ""
 	package_location = ""
 	if (len(a) == 1):
-		emptyPackage(package_name)
-		return
+		return emptyPackage(package_name)
 
 	for i in range(len(a)):
 		t = a[i].split(':', 1)
@@ -497,7 +497,7 @@ def parsePackage(package_name):
 	calculateHash(package_location, hash_handlers)
 	insertHashToPart(sbom_part, hash_handlers)
 	sbom_file["packages"].append(sbom_part)
-	return
+	return sbom_part["SPDXID"]
 
 def listAllPyFiles(root_folder):
 	py_files = []
@@ -539,7 +539,8 @@ def parseModules(file_path):
 	return modules
 
 def isDefaultModule(module_name, PIP_NAME):
-	a = os.popen(f'{PIP_NAME_} show {module_name}').read()
+	a = PP.getPackageInfo(module_name)
+	# a = os.popen(f'{PIP_NAME_} show {module_name}').read()
 	if (a == ''):
 		if (len(PIP_NAME) > 4):
 			if ((os.path.isdir(f"{findDir('site-packages', SPDX_PROJECT_ROOT_PATH)}{SEPARATOR_}site-packages{SEPARATOR_}{module_name}")) or
@@ -551,12 +552,14 @@ def isDefaultModule(module_name, PIP_NAME):
 	logProcess(f"module: {module_name} is found")
 	return 0
 
-JSON_DUMP_FILE_NAME_ = f"{SEPARATOR_}{projectSBOM(SPDX_PROJECT_ROOT_PATH)}"
+SPDX_PROJECT_SPDXID = projectSBOM(SPDX_PROJECT_ROOT_PATH)
+JSON_DUMP_FILE_NAME_ = f"{SEPARATOR_}{SPDX_PROJECT_SPDXID}.json"
 JSON_DUMP_FILE_PATH_ += JSON_DUMP_FILE_NAME_
 
 SPDX_PY_FILES_PATHS = listAllPyFiles(SPDX_PROJECT_ROOT_PATH)
 SPDX_PROJECT_TREENODE = treeNode(SPDX_PROJECT_ROOT_PATH)
 SPDX_PROJECT_TREENODE.dependenciesFiles = SPDX_PY_FILES_PATHS.copy()
+SPDX_PROJECT_TREENODE.SPDXID = SPDX_PROJECT_SPDXID
 SPDX_TREENODE_CLASSES = {
 	SPDX_PROJECT_ROOT_PATH: SPDX_PROJECT_TREENODE
 	}
@@ -566,8 +569,9 @@ SPDX_PYTHON_DEFAULT_MODULES = set()
 
 for f in SPDX_PY_FILES_PATHS:
 	logProcess(f"processing {f}")
-	fileSBOM(f)
+	file_SPDXID = fileSBOM(f)
 	if (SPDX_TREENODE_CLASSES.get(f) == None): SPDX_TREENODE_CLASSES[f] = treeNode(f)
+	SPDX_TREENODE_CLASSES[f].SPDXID = file_SPDXID
 	SPDX_TREENODE_CLASSES[SPDX_PROJECT_ROOT_PATH].dependenciesFiles_TN.append(SPDX_TREENODE_CLASSES[f])
 	dependencies = list(parseModules(f))	# .split('.')[0]
 	# SEP = ""
@@ -581,23 +585,103 @@ for f in SPDX_PY_FILES_PATHS:
 			if (SPDX_TREENODE_CLASSES.get(c_root_f) == None): SPDX_TREENODE_CLASSES[c_root_f] = treeNode(c_root_f)
 			SPDX_TREENODE_CLASSES[f].dependenciesFiles_TN.append(SPDX_TREENODE_CLASSES[c_root_f])
 		else:
-			if (SPDX_TREENODE_CLASSES.get(modl.split('.')[0]) == None): SPDX_TREENODE_CLASSES[modl.split('.')[0]] = treeNode(moduleName=modl.split('.')[0])
-			if (isDefaultModule(modl.split('.')[0], PIP_NAME_)):
-				SPDX_TREENODE_CLASSES[f].dependenciesModules_D_TN.add(SPDX_TREENODE_CLASSES[modl.split('.')[0]])
-				SPDX_PYTHON_DEFAULT_MODULES.add(modl.split('.')[0])
+			modl_base = modl.split('.')[0]
+			if (SPDX_TREENODE_CLASSES.get(modl_base) == None): SPDX_TREENODE_CLASSES[modl_base] = treeNode(moduleName=modl_base)
+			SPDX_TREENODE_CLASSES[f].dependenciesModules_TN.add(SPDX_TREENODE_CLASSES[modl_base])
+			if (isDefaultModule(modl_base, PIP_NAME_)):
+				SPDX_PYTHON_DEFAULT_MODULES.add(modl_base)
 			else:
-				SPDX_TREENODE_CLASSES[f].dependenciesModules_TN.add(SPDX_TREENODE_CLASSES[modl.split('.')[0]])
-				SPDX_PYTHON_MODULES.add(modl.split('.')[0])
+				SPDX_PYTHON_MODULES.add(modl_base)
+
+SPDX_PROCESSED_MODULES = {}
+
+def getChildrenModules(moduleName):
+	modules = []
+	if (SPDX_PROCESSED_MODULES.get(moduleName) != None):
+		logProcess(f"found cached children for {moduleName}")
+		return SPDX_PROCESSED_MODULES[moduleName]
+	logProcess(f"finding children for {moduleName}")
+	a = PP.getPackageInfo(moduleName).split('\n')
+	# a = os.popen(f'{PIP_NAME_} show {moduleName}').read().split('\n')
+	for item in a:
+		if ("Requires" in item):
+			t1 = item.rstrip('\n').rstrip(' ').split(':', 1)[-1]
+			modules = t1.lstrip(' ').split(', ')
+			break
+	modules_set = set()
+	if (SPDX_PROCESSED_MODULES.get(moduleName) == None):
+		if ((modules[0] == '') if (len(modules) > 0) else True):
+			modules_set = set()
+		else:
+			modules_set = set(modules)
+		SPDX_PROCESSED_MODULES[moduleName] = modules_set
+	if ((modules[0] == '') if (len(modules) > 0) else True):
+		logProcess("found 0 children")
+		return set()
+	logProcess(f"found: {modules} {len(modules)} children")
+	for modl in modules:
+		t2 = getChildrenModules(modl)
+		for i in t2:
+			modules_set.add(i)
+	return modules_set
+
+temp_modules_set = set()
+print(SPDX_PYTHON_MODULES)
+for modl in SPDX_PYTHON_MODULES:
+	t1 = getChildrenModules(modl)
+	for modl2 in t1:
+		if (SPDX_TREENODE_CLASSES.get(modl) == None): SPDX_TREENODE_CLASSES[modl] = treeNode(moduleName=modl)
+		if (SPDX_TREENODE_CLASSES.get(modl2) == None): SPDX_TREENODE_CLASSES[modl2] = treeNode(moduleName=modl2)
+		SPDX_TREENODE_CLASSES[modl].dependenciesModules_TN.add(SPDX_TREENODE_CLASSES[modl2])
+		if (isDefaultModule(modl2, PIP_NAME_)):
+			SPDX_PYTHON_DEFAULT_MODULES.add(modl2)
+		else:
+			temp_modules_set.add(modl2)
+
+for modl in temp_modules_set:
+	SPDX_PYTHON_MODULES.add(modl)
+
+print(SPDX_PYTHON_MODULES)
 
 for modl in SPDX_PYTHON_MODULES:
-	parsePackage(modl)
+	SPDX_TREENODE_CLASSES[modl].SPDXID = parsePackage(modl)
 
 for modl in SPDX_PYTHON_DEFAULT_MODULES:
-	parseDefaultPackage(modl)
+	SPDX_TREENODE_CLASSES[modl].SPDXID = parseDefaultPackage(modl)
 
 for part in sbom_file["packages"]:
 	part["licenseConcluded"] = "NOASSERTION"
 	part["licenseDeclared"] = "NOASSERTION"
+
+rs_doc_part = relationships_body.copy()
+rs_doc_part["spdxElementId"] = sbom_file["SPDXID"]
+rs_doc_part["relatedSpdxElement"] = SPDX_PROJECT_TREENODE.SPDXID
+rs_doc_part["relationshipType"] = "DESCRIBES"
+sbom_file["relationships"].append(rs_doc_part)
+
+def addRelationshipsForPackage(packageTN : treeNode):
+	if (packageTN.SPDXID == ''):
+		return
+	logProcess(f"building relationships for {packageTN.SPDXID}: {packageTN.moduleName}")
+	for pack in packageTN.dependenciesFiles_TN:
+		logProcess(f"attaching {pack.SPDXID} to {packageTN.SPDXID}")
+		rs_part = relationships_body.copy()
+		rs_part["spdxElementId"] = packageTN.SPDXID
+		rs_part["relatedSpdxElement"] = pack.SPDXID
+		rs_part["relationshipType"] = "DEPENDS_ON"
+		sbom_file["relationships"].append(rs_part)
+	for pack in packageTN.dependenciesModules_TN:
+		logProcess(f"attaching {pack.SPDXID} to {packageTN.SPDXID}")
+		rs_part = relationships_body.copy()
+		rs_part["spdxElementId"] = packageTN.SPDXID
+		rs_part["relatedSpdxElement"] = pack.SPDXID
+		rs_part["relationshipType"] = "DEPENDS_ON"
+		sbom_file["relationships"].append(rs_part)
+	return
+
+for pack in SPDX_TREENODE_CLASSES:
+	addRelationshipsForPackage(SPDX_TREENODE_CLASSES[pack])
+
 
 '''
 logic:
@@ -608,18 +692,22 @@ logic:
 +3.	build relationships files tree (local files + default modules) from dict
 +4.	get info about every file and add to sbom_file
 +5.	get info about every module and add to sbom_file
-6.	get dependencies of all modules
++6.	get dependencies of all modules
 7.	add relationships to sbom_file
 '''
-#py_files = listAllPyFiles(SPDX_PROJECT_ROOT_PATH)
-#print(py_files)
-# parsePackage('requests')
-# parsePackage('certifi')
-# parsePackage('urllib3')
-# parsePackage('os')
-#sbom_file[PACKAGES_NAME].append(package_json("requests"))
 
-#print(json.dumps(sbom_file, indent=4))
+'''
++	default packages reaction
++	packages installed not via pip (check local directories)
++	check virtual environment pip
++	dependencies check (set of all modules)
++	multi-platform
+	relationships
+	cache for located modules
+	check module without using 'pip show <moduleName>'
+		deep packages searching (replace('-','_'), check RECORD file in dist-info)
+'''
+
 logProcess(f"Dumping SPDX into {JSON_DUMP_FILE_NAME_}")
 f_handler_json = open(JSON_DUMP_FILE_PATH_, 'w')
 json.dump(sbom_file, fp=f_handler_json, indent=4)

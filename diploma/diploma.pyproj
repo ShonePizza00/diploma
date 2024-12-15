@@ -23,6 +23,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="diploma.py" />
+    <Compile Include="pipParser.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="tree.py">
       <SubType>Code</SubType>
     </Compile>
